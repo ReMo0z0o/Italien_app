@@ -1,0 +1,16 @@
+{
+  "name": "impariamo-italiano",
+  "version": "1.0.0",
+  "description": "Application d'apprentissage de l'italien suivant le programme UE1 → UE3 : flashcards, exercices, jeux, dialogues, conjugaison et fiches imprimables.",
+  "private": true,
+  "scripts": {
+    "start": "python3 -m http.server 8080",
+    "test": "node tests/data.js && node tests/smoke.js && node tests/interact.js",
+    "test:data": "node tests/data.js",
+    "test:routes": "node tests/smoke.js",
+    "test:flows": "node tests/interact.js"
+  },
+  "devDependencies": {
+    "playwright": "^1.49.0"
+  }
+}

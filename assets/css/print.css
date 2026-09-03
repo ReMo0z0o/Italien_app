@@ -1,0 +1,103 @@
+/* =========================================================================
+   FICHES IMPRIMABLES — mise en page A4
+   L'aperçu est visible à l'écran ; à l'impression, seule la fiche sort.
+   ========================================================================= */
+
+.sheet {
+  background: #fff; color: #111; width: 210mm; max-width: 100%;
+  margin: 0 auto 18px; padding: 14mm 14mm 12mm;
+  border: 1px solid var(--border); border-radius: 4px;
+  box-shadow: var(--shadow);
+  font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  font-size: 11pt; line-height: 1.42;
+}
+.sheet * { color: #111; }
+
+.sheet-head {
+  display: flex; align-items: flex-end; justify-content: space-between;
+  gap: 12px; border-bottom: 2.5px solid #111; padding-bottom: 7px; margin-bottom: 14px;
+}
+.sheet-head h1 { font-size: 17pt; margin: 0; letter-spacing: -.01em; }
+.sheet-head .sub { font-size: 9.5pt; color: #555 !important; margin-top: 2px; }
+.sheet-head .flag {
+  width: 40px; height: 26px; flex: none; border: 1px solid #999;
+  background: linear-gradient(90deg, #0a8754 0 33.3%, #fff 33.3% 66.6%, #c8362f 66.6% 100%);
+}
+.sheet-foot {
+  margin-top: 16px; padding-top: 7px; border-top: 1px solid #bbb;
+  font-size: 8pt; color: #777 !important; display: flex; justify-content: space-between;
+}
+
+.sheet h2 { font-size: 12.5pt; margin: 14px 0 7px; padding-bottom: 3px;
+  border-bottom: 1px solid #999; letter-spacing: .01em; }
+.sheet h3 { font-size: 10.5pt; margin: 11px 0 5px; }
+.sheet p { margin: 0 0 7px; }
+
+.sheet table { width: 100%; border-collapse: collapse; margin: 8px 0 12px; font-size: 10pt; }
+.sheet table th, .sheet table td { border: 1px solid #999; padding: 4px 7px; text-align: left;
+  vertical-align: top; }
+.sheet table th { background: #ececec !important; font-weight: 700; font-size: 9pt;
+  -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.sheet table caption { caption-side: top; text-align: left; font-weight: 700;
+  font-size: 10pt; padding-bottom: 3px; }
+.sheet table.zebra tr:nth-child(even) td { background: #f6f6f6 !important;
+  -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+
+.sheet .cols2 { column-count: 2; column-gap: 10mm; }
+.sheet .cols3 { column-count: 3; column-gap: 8mm; }
+.sheet .nobreak { break-inside: avoid; page-break-inside: avoid; }
+
+.sheet .voc-line { display: flex; justify-content: space-between; gap: 8px;
+  border-bottom: 1px dotted #bbb; padding: 2.5px 0; break-inside: avoid; font-size: 10pt; }
+.sheet .voc-line .i { font-weight: 700; }
+.sheet .voc-line .f { color: #444 !important; text-align: right; }
+
+.sheet .box { border: 1.5px solid #111; padding: 7px 10px; margin: 9px 0; break-inside: avoid; }
+.sheet .box .bt { font-weight: 700; font-size: 9.5pt; text-transform: uppercase;
+  letter-spacing: .05em; margin-bottom: 3px; }
+.sheet .note { font-size: 9pt; color: #555 !important; font-style: italic; }
+
+/* Lignes d'écriture pour les exercices */
+.sheet .write-line { border-bottom: 1px solid #999; height: 22px; margin: 4px 0 9px; }
+.sheet ol.ex-ol { padding-left: 20px; margin: 6px 0; }
+.sheet ol.ex-ol > li { margin-bottom: 9px; break-inside: avoid; }
+.sheet .fillspace { display: inline-block; min-width: 110px; border-bottom: 1px solid #444; }
+
+/* Cartes à découper */
+.cut-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0; margin-top: 6px; }
+.cut-card {
+  border: 1px dashed #777; min-height: 34mm; padding: 6px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  text-align: center; break-inside: avoid;
+}
+.cut-card .ci { font-weight: 700; font-size: 11pt; }
+.cut-card .cf { font-size: 9pt; color: #444 !important; margin-top: 3px; }
+.cut-card .cn { font-size: 7.5pt; color: #777 !important; margin-top: 3px; font-style: italic; }
+
+/* Cases à cocher / suivi */
+.sheet .track { display: flex; gap: 4px; }
+.sheet .track i { width: 13px; height: 13px; border: 1px solid #666; display: inline-block; }
+
+.print-toolbar {
+  position: sticky; top: 0; z-index: 5; background: var(--bg); padding: 10px 0 14px;
+  display: flex; gap: 9px; flex-wrap: wrap; align-items: center;
+  border-bottom: 1px solid var(--border); margin-bottom: 16px;
+}
+
+/* ============================ @media print ============================== */
+@page { size: A4; margin: 12mm; }
+
+@media print {
+  html, body { background: #fff !important; }
+  .sidebar, .print-toolbar, .no-print, .topbar { display: none !important; }
+  .main { padding: 0 !important; max-width: none !important; }
+  .app { display: block !important; }
+  .sheet {
+    width: auto; max-width: none; margin: 0; padding: 0;
+    border: 0; border-radius: 0; box-shadow: none;
+    page-break-after: always;
+  }
+  .sheet:last-child { page-break-after: auto; }
+  .sheet-head { break-inside: avoid; }
+  a[href]::after { content: ""; }
+}
