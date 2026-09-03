@@ -5,7 +5,7 @@ const BASE = 'file://' + path.join(ROOT, 'index.html');
 
 (async () => {
   const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', args: ['--no-sandbox'] });
-  const page = await browser.newPage({ viewport: { width: 1280, height: 950 } });
+  const page = await browser.newPage({ viewport: { width: 1280, height: 950 }, acceptDownloads: true });
   const errors = [];
   page.on('pageerror', e => errors.push('[pageerror] ' + e.message));
   page.on('console', m => { if (m.type() === 'error') errors.push('[console] ' + m.text()); });
@@ -243,6 +243,79 @@ const BASE = 'file://' + path.join(ROOT, 'index.html');
       if (over > 2) throw new Error(r + ' déborde de ' + over + 'px');
     }
     await page.setViewportSize({ width: 1280, height: 950 });
+  });
+
+  // ---- APERÇU PDF ----
+  await T('Fiches : aperçu PDF intégré', async () => {
+    await go('#/stampa/essentiel');
+    await page.click('[data-m="pdf"]');
+    await page.waitForSelector('.pdf-frame iframe', { timeout: 8000 });
+    const src = await page.$eval('.pdf-frame iframe', e => e.src);
+    if (!/^blob:/.test(src)) throw new Error('l’aperçu n’est pas un blob PDF : ' + src.slice(0, 40));
+    const head = await page.evaluate(async s => {
+      const r = await fetch(s.split('#')[0]);
+      const b = new Uint8Array(await r.arrayBuffer());
+      return { magic: String.fromCharCode(b[0], b[1], b[2], b[3]), len: b.length };
+    }, src);
+    if (head.magic !== '%PDF') throw new Error('le blob n’est pas un PDF (' + head.magic + ')');
+    if (head.len < 5000) throw new Error('PDF trop petit : ' + head.len);
+    const pgc = await page.innerText('#pgc');
+    if (!/\d+ page/.test(pgc)) throw new Error('nombre de pages non affiché : ' + pgc);
+    // retour à l'aperçu page
+    await page.click('[data-m="page"]');
+    await page.waitForTimeout(200);
+    if (!(await page.$('.sheet'))) throw new Error('retour à l’aperçu page cassé');
+  });
+
+  await T('Fiches : le PDF suit la sélection', async () => {
+    await go('#/stampa/vocabulaire');
+    await page.click('#none'); await page.waitForTimeout(200);
+    await page.click('[data-m="pdf"]'); await page.waitForTimeout(600);
+    const emptyMsg = await page.innerText('#pdfview');
+    if (!/Sélectionnez/.test(emptyMsg)) throw new Error('sélection vide non signalée en mode PDF');
+    await page.click('#pick .chip'); await page.waitForTimeout(900);
+    if (!(await page.$('.pdf-frame iframe'))) throw new Error('le PDF ne se régénère pas après sélection');
+  });
+
+  await T('Fiches : téléchargement du PDF', async () => {
+    await go('#/stampa/exercices');
+    const [dl] = await Promise.all([
+      page.waitForEvent('download', { timeout: 12000 }),
+      page.click('#dl')
+    ]);
+    const name = dl.suggestedFilename();
+    if (!/\.pdf$/.test(name)) throw new Error('nom de fichier inattendu : ' + name);
+    const p2 = await dl.path();
+    const size = require('fs').statSync(p2).size;
+    if (size < 4000) throw new Error('fichier téléchargé trop petit : ' + size);
+  });
+
+  // ---- MOBILE ----
+  await T('Mobile : la navigation est repliée au démarrage', async () => {
+    const m = await browser.newPage({ viewport: { width: 390, height: 800 }, isMobile: true, hasTouch: true });
+    await m.goto(BASE + '#/', { waitUntil: 'load' }); await m.waitForTimeout(400);
+    const collapsed = await m.$eval('#sidebar', e => e.classList.contains('collapsed'));
+    if (!collapsed) throw new Error('le menu occupe tout le premier écran');
+    const navVisible = await m.$eval('.nav', e => getComputedStyle(e).display !== 'none');
+    if (navVisible) throw new Error('les liens de navigation restent affichés');
+    await m.click('#burger'); await m.waitForTimeout(150);
+    if (!(await m.$eval('.nav', e => getComputedStyle(e).display !== 'none'))) {
+      throw new Error('le bouton menu n’ouvre pas la navigation');
+    }
+    await m.close();
+  });
+
+  await T('Mobile : aucune liste ne déborde', async () => {
+    const m = await browser.newPage({ viewport: { width: 390, height: 800 }, isMobile: true, hasTouch: true });
+    const routes = ['#/lessico', '#/lezioni/prep-articolate', '#/dialoghi/dial-bar', '#/giochi/impiccato',
+                    '#/verbi/essere', '#/stampa/verbes', '#/stampa/vocabulaire', '#/stampa/programme',
+                    '#/stampa/cartes', '#/programma'];
+    for (const r of routes) {
+      await m.goto(BASE + r, { waitUntil: 'load' }); await m.waitForTimeout(320);
+      const over = await m.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+      if (over > 2) { await m.close(); throw new Error(r + ' déborde de ' + over + 'px'); }
+    }
+    await m.close();
   });
 
   console.log('\n=== ERREURS (' + errors.length + ') ===');

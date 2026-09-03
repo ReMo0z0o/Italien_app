@@ -1,7 +1,7 @@
-/* ===== Fiches imprimables (papier ou « Enregistrer en PDF ») ============ */
+/* ===== Fiches à imprimer — aperçu page, aperçu PDF, téléchargement ====== */
 APP.views.stampa = (function () {
   'use strict';
-  var E = APP.util.esc, U = APP.ui, ut = APP.util;
+  var E = APP.util.esc, U = APP.ui, ut = APP.util, SH = APP.sheet;
 
   var SHEETS = [
     { id: 'vocabulaire', ic: '📗', t: 'Fiches de vocabulaire', d: 'Un thème par page, en deux colonnes, avec les notes et les pièges.' },
@@ -15,260 +15,269 @@ APP.views.stampa = (function () {
     { id: 'programme', ic: '🗺', t: 'Programme à cocher', d: 'Toute l’arborescence du cours, avec cases de suivi.' }
   ];
 
-  /* ---------- fabrique de page ---------- */
-  function sheet(title, sub, body) {
-    return '<div class="sheet"><div class="sheet-head"><div>' +
-      '<h1>' + title + '</h1><div class="sub">' + sub + '</div></div><div class="flag"></div></div>' +
-      body +
-      '<div class="sheet-foot"><span>Impariamo l’italiano — fiche d’étude</span>' +
-      '<span>Nom : ________________   Date : ____ / ____ / ______</span></div></div>';
-  }
+  /* ===================== constructeurs de fiches ======================== */
 
-  function vocLines(items, hideFr) {
-    return items.map(function (i) {
-      return '<div class="voc-line"><span class="i">' + E(i.it) + '</span>' +
-        '<span class="f">' + (hideFr ? '' : E(i.fr)) + '</span></div>' +
-        (!hideFr && i.note ? '<div class="note" style="margin:-2px 0 4px">↳ ' + E(i.note) + '</div>' : '');
-    }).join('');
-  }
-
-  /* ---------- 1. vocabulaire ---------- */
   function sVocabulaire(sel) {
     return DATA.vocab.filter(function (t) { return sel.indexOf(t.id) >= 0; }).map(function (t) {
-      return sheet(t.icon + ' ' + E(t.title), E(t.subtitle) + ' — ' + t.ue + ' · ' + t.items.length + ' entrées',
-        '<div class="cols2">' + vocLines(t.items, false) + '</div>' +
-        '<div class="box" style="margin-top:12px"><div class="bt">À retenir</div>' +
-        '<div class="note">Cochez les mots déjà acquis, et revenez sur les autres dans 2 jours.</div></div>');
-    }).join('');
+      return {
+        title: t.title, sub: t.subtitle + ' — ' + t.ue + ' · ' + t.items.length + ' entrées',
+        blocks: [
+          { t: 'voc', items: t.items, cols: 2 },
+          { t: 'box', title: 'À retenir', runs: 'Cochez les mots déjà acquis, et revenez sur les autres dans deux jours.' }
+        ]
+      };
+    });
   }
 
-  /* ---------- 2. test ---------- */
   function sTest(sel) {
-    var out = '';
+    var out = [];
     DATA.vocab.filter(function (t) { return sel.indexOf(t.id) >= 0; }).forEach(function (t) {
       var items = ut.shuffle(t.items);
-      out += sheet('📝 Test — ' + E(t.title), 'Traduisez en français. ' + items.length + ' items · ' + t.ue,
-        '<div class="cols2">' + vocLines(items, true) + '</div>' +
-        '<div class="box" style="margin-top:14px"><div class="bt">Score</div>' +
-        '<div class="note">_____ / ' + items.length + '   ·   Temps : _______   ·   À refaire le : ___ / ___</div></div>');
-      out += sheet('✅ Corrigé — ' + E(t.title), 'Vérifiez vos réponses',
-        '<div class="cols2">' + vocLines(items, false) + '</div>');
+      out.push({
+        title: 'Test — ' + t.title,
+        sub: 'Traduisez en français. ' + items.length + ' items · ' + t.ue,
+        blocks: [
+          { t: 'voc', items: items, cols: 2, hideFr: true },
+          { t: 'box', title: 'Score', runs: '_____ / ' + items.length + '   ·   Temps : _______   ·   À refaire le : ____ / ____' }
+        ]
+      });
+      out.push({
+        title: 'Corrigé — ' + t.title, sub: 'Vérifiez vos réponses',
+        blocks: [{ t: 'voc', items: items, cols: 2 }]
+      });
     });
     return out;
   }
 
-  /* ---------- 3. cartes à découper ---------- */
   function sCartes(sel) {
     var items = [];
     DATA.vocab.filter(function (t) { return sel.indexOf(t.id) >= 0; })
-      .forEach(function (t) { t.items.forEach(function (i) { items.push(Object.assign({ theme: t.title }, i)); }); });
-    var pages = [], per = 9;
-    for (var i = 0; i < items.length; i += per) pages.push(items.slice(i, i + per));
-    return pages.map(function (p, n) {
-      return sheet('✂️ Cartes à découper', 'Page ' + (n + 1) + ' / ' + pages.length +
-        ' — pliez au milieu ou découpez, l’italien au recto',
-        '<div class="cut-grid">' + p.map(function (i) {
-          return '<div class="cut-card"><div class="ci">' + E(i.it) + '</div>' +
-            '<div class="cf">' + E(i.fr) + '</div>' +
-            (i.note ? '<div class="cn">' + E(i.note) + '</div>' : '') + '</div>';
-        }).join('') + '</div>');
-    }).join('');
-  }
-
-  /* ---------- 4. verbes ---------- */
-  function sVerbes(sel) {
-    var V = DATA.verbs;
-    var list = sel;
-    var out = '';
-    for (var k = 0; k < list.length; k += 2) {
-      var chunk = list.slice(k, k + 2).map(function (inf) { return V.find(inf); }).filter(Boolean);
-      out += sheet('🔤 Conjugaison', chunk.map(function (v) { return v.inf; }).join(' · '),
-        chunk.map(function (v) {
-          var rows = V.persons.map(function (p, i) {
-            return '<tr><td><b>' + E(p) + '</b></td><td>' + E(v.presente[i]) + '</td><td>' + E(v.passato[i]) + '</td>' +
-              '<td>' + E(v.imperfetto[i]) + '</td><td>' + E(v.futuro[i]) + '</td><td>' + E(v.congiuntivo[i]) + '</td></tr>';
-          }).join('');
-          return '<h2>' + E(v.inf) + ' — ' + E(v.fr) + '</h2>' +
-            '<p class="note">Groupe ' + v.group.toUpperCase() + ' · auxiliaire ' +
-            E(v.aux === 'both' ? 'avere / essere' : v.aux) + ' · participe <b>' + E(v.participio) +
-            '</b> · gérondif <b>' + E(v.gerundio) + '</b></p>' +
-            '<table class="zebra"><thead><tr><th></th><th>Presente</th><th>Passato pross.</th>' +
-            '<th>Imperfetto</th><th>Futuro</th><th>Congiuntivo</th></tr></thead><tbody>' + rows + '</tbody></table>' +
-            '<div class="box"><div class="bt">Imperativo</div>' +
-            'tu <b>' + E(v.imperativo.tu) + '</b> · Lei <b>' + E(v.imperativo.Lei) + '</b> · noi <b>' +
-            E(v.imperativo.noi) + '</b> · voi <b>' + E(v.imperativo.voi) + '</b> · négatif (tu) <b>' +
-            E(v.imperativo.negTu) + '</b></div>';
-        }).join(''));
+      .forEach(function (t) { t.items.forEach(function (i) { items.push(i); }); });
+    var out = [], per = 9, n = Math.ceil(items.length / per);
+    for (var i = 0; i < items.length; i += per) {
+      out.push({
+        title: 'Cartes à découper',
+        sub: 'Page ' + (out.length + 1) + ' / ' + n + ' — l’italien au recto, découpez suivant les traits',
+        blocks: [{ t: 'cards', items: items.slice(i, i + per) }]
+      });
     }
     return out;
   }
 
-  /* ---------- 5. grammaire ---------- */
-  function blockToSheet(b) {
+  function sVerbes(sel) {
+    var V = DATA.verbs, out = [];
+    for (var k = 0; k < sel.length; k += 2) {
+      var chunk = sel.slice(k, k + 2).map(function (inf) { return V.find(inf); }).filter(Boolean);
+      if (!chunk.length) continue;
+      var blocks = [];
+      chunk.forEach(function (v) {
+        blocks.push({ t: 'h2', text: v.inf + ' — ' + v.fr });
+        blocks.push({ t: 'note', runs: 'Groupe ' + v.group.toUpperCase() + ' · auxiliaire ' +
+          (v.aux === 'both' ? 'avere / essere' : v.aux) + ' · participe <b>' + v.participio +
+          '</b> · gérondif <b>' + v.gerundio + '</b>' });
+        blocks.push({
+          t: 'table', zebra: true, w: [1.15, 1, 1.35, 1.1, 1, 1.1],
+          head: ['', 'Presente', 'Passato pross.', 'Imperfetto', 'Futuro', 'Congiuntivo'],
+          rows: V.persons.map(function (p, i) {
+            return [{ c: '<b>' + p + '</b>' }, v.presente[i], v.passato[i], v.imperfetto[i], v.futuro[i], v.congiuntivo[i]];
+          })
+        });
+        blocks.push({ t: 'box', title: 'Imperativo', runs:
+          'tu <b>' + v.imperativo.tu + '</b> · Lei <b>' + v.imperativo.Lei + '</b> · noi <b>' +
+          v.imperativo.noi + '</b> · voi <b>' + v.imperativo.voi + '</b> · négatif (tu) <b>' +
+          v.imperativo.negTu + '</b>' });
+      });
+      out.push({ title: 'Conjugaison', sub: chunk.map(function (v) { return v.inf; }).join(' · '), blocks: blocks });
+    }
+    return out;
+  }
+
+  function lessonBlock(b) {
     switch (b.t) {
-      case 'p': return '<p>' + b.text + '</p>';
-      case 'rule': return '<div class="box"><div class="bt">' + (b.title || 'Règle') + '</div>' + b.text + '</div>';
-      case 'warn': return '<div class="box"><div class="bt">⚠ ' + (b.title || 'Attention') + '</div>' + b.text + '</div>';
-      case 'tip': return '<div class="box"><div class="bt">💡 ' + (b.title || 'Astuce') + '</div>' + b.text + '</div>';
-      case 'table':
-        return '<table class="zebra">' + (b.caption ? '<caption>' + b.caption + '</caption>' : '') +
-          (b.head && b.head.length ? '<thead><tr>' + b.head.map(function (c) { return '<th>' + c + '</th>'; }).join('') + '</tr></thead>' : '') +
-          '<tbody>' + b.rows.map(function (r) {
-            return '<tr>' + r.map(function (c) { return '<td>' + c + '</td>'; }).join('') + '</tr>';
-          }).join('') + '</tbody></table>';
-      case 'ex':
-        return '<h3>Exemples</h3>' + b.items.map(function (x) {
-          return '<div class="voc-line"><span class="i">' + E(x.it) + '</span><span class="f">' + E(x.fr) + '</span></div>';
-        }).join('');
-      case 'list': return '<ul>' + b.items.map(function (i) { return '<li>' + i + '</li>'; }).join('') + '</ul>';
-      default: return '';
+      case 'p': return { t: 'p', runs: b.text };
+      case 'rule': return { t: 'box', title: b.title || 'Règle', runs: b.text };
+      case 'warn': return { t: 'box', title: b.title ? b.title.replace(/^[^\wÀ-ſ]+/, '') : 'Attention', runs: b.text };
+      case 'tip': return { t: 'box', title: b.title ? b.title.replace(/^[^\wÀ-ſ]+/, '') : 'Astuce', runs: b.text };
+      case 'table': return { t: 'table', head: b.head, rows: b.rows, zebra: true, caption: b.caption };
+      case 'ex': return { t: 'voc', cols: 1, items: b.items.map(function (x) { return { it: x.it, fr: x.fr }; }) };
+      case 'list': return { t: 'p', runs: b.items.map(function (i) { return '• ' + i; }).join('<br>') };
+      default: return null;
     }
   }
 
   function sGrammaire(sel) {
     return DATA.grammar.filter(function (g) { return sel.indexOf(g.id) >= 0; }).map(function (g) {
-      return sheet(g.icon + ' ' + E(g.title), E(g.subtitle) + ' — ' + g.ue,
-        g.blocks.map(blockToSheet).join(''));
-    }).join('');
+      return {
+        title: g.title, sub: g.subtitle + ' — ' + g.ue,
+        blocks: g.blocks.map(lessonBlock).filter(Boolean)
+      };
+    });
   }
 
-  /* ---------- 6. exercices ---------- */
   function sExercices(sel, n) {
     var pool = [];
     DATA.exercises.filter(function (g) { return !sel.length || sel.indexOf(g.topic) >= 0; })
-      .forEach(function (g) { g.items.forEach(function (i) { pool.push(Object.assign({ _g: g.title }, i)); }); });
+      .forEach(function (g) { g.items.forEach(function (i) { pool.push(i); }); });
+    if (!pool.length) return [];
     var items = ut.sample(pool, Math.min(n || 20, pool.length));
 
-    var qs = items.map(function (it, i) {
-      if (it.t === 'qcm') {
-        return '<li>' + E(it.q).replace(/___+/g, '<span class="fillspace"></span>') + '<br>' +
-          it.opts.map(function (o, k) { return '<span style="margin-right:14px">☐ ' + E(o) + '</span>'; }).join('') + '</li>';
-      }
-      if (it.t === 'vf') return '<li>' + E(it.q) + ' &nbsp; ☐ Vrai &nbsp; ☐ Faux</li>';
-      if (it.t === 'trad') return '<li>' + E(it.fr) + '<div class="write-line"></div></li>';
-      return '<li>' + E(it.q).replace(/___+/g, '<span class="fillspace"></span>') + '</li>';
-    }).join('');
+    var qs = items.map(function (it) {
+      if (it.t === 'qcm') return { runs: it.q.replace(/_{3,}/g, '……………'), opts: it.opts };
+      if (it.t === 'vf') return { runs: it.q, opts: ['Vrai', 'Faux'] };
+      if (it.t === 'trad') return { runs: it.fr, line: true };
+      return { runs: it.q.replace(/_{3,}/g, '………………') };
+    });
 
-    var sol = items.map(function (it, i) {
+    var sol = items.map(function (it) {
       var a = it.t === 'qcm' ? it.opts[it.a] : it.t === 'vf' ? (it.a ? 'Vrai' : 'Faux') : it.a;
-      return '<li><b>' + E(a) + '</b>' + (it.why ? ' <span class="note">— ' + it.why + '</span>' : '') + '</li>';
-    }).join('');
+      return { runs: '<b>' + a + '</b>' + (it.why ? ' — <i>' + SH.runsText(it.why) + '</i>' : '') };
+    });
 
-    return sheet('✏️ Feuille d’exercices', items.length + ' exercices — écrivez directement sur la feuille',
-      '<ol class="ex-ol">' + qs + '</ol>' +
-      '<div class="box"><div class="bt">Score</div><div class="note">_____ / ' + items.length + '</div></div>') +
-      sheet('✅ Corrigé', 'Réponses de la feuille d’exercices', '<ol class="ex-ol">' + sol + '</ol>');
+    return [
+      { title: 'Feuille d’exercices', sub: items.length + ' exercices — écrivez directement sur la feuille',
+        blocks: [{ t: 'ol', items: qs }, { t: 'box', title: 'Score', runs: '_____ / ' + items.length }] },
+      { title: 'Corrigé', sub: 'Réponses de la feuille d’exercices', blocks: [{ t: 'ol', items: sol }] }
+    ];
   }
 
-  /* ---------- 7. antisèche ---------- */
   function sEssentiel() {
-    var V = DATA.verbs;
-    var irrPP = V.raw.filter(function (r) { return r.pp; }).slice(0, 26)
-      .map(function (r) { return E(r.inf) + ' → <b>' + E(r.pp) + '</b>'; });
+    var irrPP = DATA.verbs.raw.filter(function (r) { return r.pp; }).slice(0, 27)
+      .map(function (r) { return r.inf + ' → <b>' + r.pp + '</b>'; });
 
-    var p1 = sheet('⭐ L’antisèche — 1/2', 'Articles, prépositions, pronoms · à garder sous les yeux',
-      '<h2>Articles définis et indéfinis</h2>' +
-      '<table class="zebra"><thead><tr><th></th><th>devant consonne</th><th>s+cons., z, ps, gn, y</th><th>voyelle</th></tr></thead><tbody>' +
-      '<tr><td><b>m. sing.</b></td><td>il / un</td><td>lo / uno</td><td>l’ / un</td></tr>' +
-      '<tr><td><b>m. plur.</b></td><td>i</td><td>gli</td><td>gli</td></tr>' +
-      '<tr><td><b>f. sing.</b></td><td>la / una</td><td>la / una</td><td>l’ / un’</td></tr>' +
-      '<tr><td><b>f. plur.</b></td><td>le</td><td>le</td><td>le</td></tr></tbody></table>' +
+    var p1 = {
+      title: 'L’antisèche — 1 / 2', sub: 'Articles, prépositions, pronoms · à garder sous les yeux',
+      blocks: [
+        { t: 'h2', text: 'Articles définis et indéfinis' },
+        { t: 'table', zebra: true, w: [1, 1.2, 1.5, 1],
+          head: ['', 'devant consonne', 's + cons., z, ps, gn, y', 'voyelle'],
+          rows: [
+            [{ c: '<b>m. sing.</b>' }, 'il / un', 'lo / uno', 'l’ / un'],
+            [{ c: '<b>m. plur.</b>' }, 'i', 'gli', 'gli'],
+            [{ c: '<b>f. sing.</b>' }, 'la / una', 'la / una', 'l’ / un’'],
+            [{ c: '<b>f. plur.</b>' }, 'le', 'le', 'le']
+          ] },
+        { t: 'h2', text: 'Prépositions articulées' },
+        { t: 'table', zebra: true,
+          head: ['', 'il', 'lo', 'l’', 'i', 'gli', 'la', 'le'],
+          rows: [
+            [{ c: '<b>a</b>' }, 'al', 'allo', 'all’', 'ai', 'agli', 'alla', 'alle'],
+            [{ c: '<b>di</b>' }, 'del', 'dello', 'dell’', 'dei', 'degli', 'della', 'delle'],
+            [{ c: '<b>da</b>' }, 'dal', 'dallo', 'dall’', 'dai', 'dagli', 'dalla', 'dalle'],
+            [{ c: '<b>in</b>' }, 'nel', 'nello', 'nell’', 'nei', 'negli', 'nella', 'nelle'],
+            [{ c: '<b>su</b>' }, 'sul', 'sullo', 'sull’', 'sui', 'sugli', 'sulla', 'sulle']
+          ] },
+        { t: 'h2', text: 'Pronoms' },
+        { t: 'table', zebra: true,
+          head: ['Directs', 'Indirects', 'Combinés (+ lo)'],
+          rows: [['mi, ti, lo, la, ci, vi, li, le', 'mi, ti, gli, le, ci, vi, gli',
+                  'me lo, te lo, glielo, ce lo, ve lo, glielo']] },
+        { t: 'box', title: 'Réflexes', runs:
+          '<b>NE</b> = une partie (<i>Ne prendo due</i>) · <b>CI</b> = lieu / y (<i>Ci vado</i>) · ' +
+          '<b>Ce l’ho</b> = je l’ai (sur moi) · <b>Ci vuole / Ci vogliono</b> = il faut · ' +
+          '<b>Ci metto</b> = je mets (durée) · <b>Bisogna + inf.</b> = il faut · ' +
+          '<b>Ho bisogno di</b> = j’ai besoin de' },
+        { t: 'h2', text: 'Quantité' },
+        { t: 'p', runs: '<b>Adverbe</b> (après un verbe, devant un adjectif) → invariable : ' +
+          '<i>Ho mangiato molto. È molto bella.</i><br><b>Adjectif</b> (devant un nom) → accord : ' +
+          '<i>molta fame, molte persone, pochi amici, troppe macchine.</i>' },
+        { t: 'h2', text: 'Bello / quello' },
+        { t: 'p', runs: 'Suivent l’article défini : <b>bel</b> libro · <b>bello</b> studente · ' +
+          '<b>bell’</b>amico · <b>bei</b> libri · <b>begli</b> occhi · <b>bella</b> casa · <b>belle</b> case.' }
+      ]
+    };
 
-      '<h2>Prépositions articulées</h2>' +
-      '<table class="zebra"><thead><tr><th></th><th>il</th><th>lo</th><th>l’</th><th>i</th><th>gli</th><th>la</th><th>le</th></tr></thead><tbody>' +
-      '<tr><td><b>a</b></td><td>al</td><td>allo</td><td>all’</td><td>ai</td><td>agli</td><td>alla</td><td>alle</td></tr>' +
-      '<tr><td><b>di</b></td><td>del</td><td>dello</td><td>dell’</td><td>dei</td><td>degli</td><td>della</td><td>delle</td></tr>' +
-      '<tr><td><b>da</b></td><td>dal</td><td>dallo</td><td>dall’</td><td>dai</td><td>dagli</td><td>dalla</td><td>dalle</td></tr>' +
-      '<tr><td><b>in</b></td><td>nel</td><td>nello</td><td>nell’</td><td>nei</td><td>negli</td><td>nella</td><td>nelle</td></tr>' +
-      '<tr><td><b>su</b></td><td>sul</td><td>sullo</td><td>sull’</td><td>sui</td><td>sugli</td><td>sulla</td><td>sulle</td></tr>' +
-      '</tbody></table>' +
-
-      '<h2>Pronoms</h2>' +
-      '<table class="zebra"><thead><tr><th>Directs</th><th>Indirects</th><th>Combinés (+ lo)</th></tr></thead><tbody>' +
-      '<tr><td>mi, ti, lo, la, ci, vi, li, le</td><td>mi, ti, gli, le, ci, vi, gli</td>' +
-      '<td>me lo, te lo, glielo, ce lo, ve lo, glielo</td></tr></tbody></table>' +
-      '<div class="box"><div class="bt">Réflexes</div>' +
-      '<b>NE</b> = une partie (<i>Ne prendo due</i>) · <b>CI</b> = lieu / y (<i>Ci vado</i>) · ' +
-      '<b>Ce l’ho</b> = je l’ai (sur moi) · <b>Ci vuole / Ci vogliono</b> = il faut · ' +
-      '<b>Ci metto</b> = je mets (durée) · <b>Bisogna + inf.</b> = il faut · ' +
-      '<b>Ho bisogno di</b> = j’ai besoin de</div>' +
-
-      '<h2>Quantité</h2>' +
-      '<p><b>Adverbe</b> (après un verbe, devant un adjectif) → invariable : <i>Ho mangiato molto. È molto bella.</i><br>' +
-      '<b>Adjectif</b> (devant un nom) → accord : <i>molta fame, molte persone, pochi amici, troppe macchine.</i></p>' +
-
-      '<h2>Bello / quello</h2>' +
-      '<p>Suivent l’article défini : <b>bel</b> libro · <b>bello</b> studente · <b>bell’</b>amico · ' +
-      '<b>bei</b> libri · <b>begli</b> occhi · <b>bella</b> casa · <b>belle</b> case.</p>');
-
-    var p2 = sheet('⭐ L’antisèche — 2/2', 'Verbes : temps, participes, irréguliers',
-      '<h2>Terminaisons à connaître</h2>' +
-      '<table class="zebra"><thead><tr><th>Temps</th><th>-ARE</th><th>-ERE</th><th>-IRE</th></tr></thead><tbody>' +
-      '<tr><td><b>Presente</b></td><td>o, i, a, iamo, ate, ano</td><td>o, i, e, iamo, ete, ono</td><td>o, i, e, iamo, ite, ono</td></tr>' +
-      '<tr><td><b>Imperfetto</b></td><td colspan="3">radical + vo, vi, va, vamo, vate, vano</td></tr>' +
-      '<tr><td><b>Futuro</b></td><td>-ER- + ò, ai, à, emo, ete, anno</td><td>-ER- + …</td><td>-IR- + …</td></tr>' +
-      '<tr><td><b>Congiuntivo</b></td><td>i, i, i, iamo, iate, ino</td><td>a, a, a, iamo, iate, ano</td><td>a, a, a, iamo, iate, ano</td></tr>' +
-      '<tr><td><b>Condizionale</b></td><td colspan="3">radical du futur + ei, esti, ebbe, emmo, este, ebbero</td></tr>' +
-      '<tr><td><b>Participio</b></td><td>-ato</td><td>-uto</td><td>-ito</td></tr>' +
-      '<tr><td><b>Gerundio</b></td><td>-ando</td><td>-endo</td><td>-endo</td></tr>' +
-      '</tbody></table>' +
-
-      '<h2>Futur : radicaux irréguliers</h2>' +
-      '<p>essere → <b>sarò</b> · avere → <b>avrò</b> · fare → <b>farò</b> · andare → <b>andrò</b> · ' +
-      'dovere → <b>dovrò</b> · potere → <b>potrò</b> · volere → <b>vorrò</b> · sapere → <b>saprò</b> · ' +
-      'vedere → <b>vedrò</b> · vivere → <b>vivrò</b> · venire → <b>verrò</b> · rimanere → <b>rimarrò</b> · ' +
-      'tenere → <b>terrò</b> · bere → <b>berrò</b> · dare → <b>darò</b> · stare → <b>starò</b>.<br>' +
-      '<span class="note">pagare → pagherò · cercare → cercherò · mangiare → mangerò · cominciare → comincerò</span></p>' +
-
-      '<h2>Participes passés irréguliers</h2>' +
-      '<div class="cols3"><p>' + irrPP.join('<br>') + '</p></div>' +
-
-      '<h2>Auxiliaire ESSERE</h2>' +
-      '<p>andare, venire, partire, arrivare, tornare, entrare, uscire, salire, scendere, restare, rimanere, ' +
-      'nascere, morire, diventare, piacere, essere, stare + <b>tous les verbes réfléchis</b>. ' +
-      'Le participe s’accorde avec le sujet.</p>' +
-      '<div class="box"><div class="bt">Avec AVERE</div>Participe invariable… <b>sauf</b> devant lo / la / li / le : ' +
-      '<i>La pizza? L’ho mangiat<b>a</b>. I libri? Li ho lett<b>i</b>.</i></div>');
-    return p1 + p2;
+    var p2 = {
+      title: 'L’antisèche — 2 / 2', sub: 'Verbes : temps, participes, irréguliers',
+      blocks: [
+        { t: 'h2', text: 'Terminaisons à connaître' },
+        { t: 'table', zebra: true, w: [1, 1.5, 1.3, 1.3],
+          head: ['Temps', '-ARE', '-ERE', '-IRE'],
+          rows: [
+            [{ c: '<b>Presente</b>' }, 'o, i, a, iamo, ate, ano', 'o, i, e, iamo, ete, ono', 'o, i, e, iamo, ite, ono'],
+            [{ c: '<b>Imperfetto</b>' }, { c: 'radical + vo, vi, va, vamo, vate, vano', span: 3 }],
+            [{ c: '<b>Futuro</b>' }, '-ER- + ò, ai, à, emo, ete, anno', '-ER- + …', '-IR- + …'],
+            [{ c: '<b>Congiuntivo</b>' }, 'i, i, i, iamo, iate, ino', 'a, a, a, iamo, iate, ano', 'a, a, a, iamo, iate, ano'],
+            [{ c: '<b>Condizionale</b>' }, { c: 'radical du futur + ei, esti, ebbe, emmo, este, ebbero', span: 3 }],
+            [{ c: '<b>Participio</b>' }, '-ato', '-uto', '-ito'],
+            [{ c: '<b>Gerundio</b>' }, '-ando', '-endo', '-endo']
+          ] },
+        { t: 'h2', text: 'Futur : radicaux irréguliers' },
+        { t: 'p', runs: 'essere → <b>sarò</b> · avere → <b>avrò</b> · fare → <b>farò</b> · andare → <b>andrò</b> · ' +
+          'dovere → <b>dovrò</b> · potere → <b>potrò</b> · volere → <b>vorrò</b> · sapere → <b>saprò</b> · ' +
+          'vedere → <b>vedrò</b> · vivere → <b>vivrò</b> · venire → <b>verrò</b> · rimanere → <b>rimarrò</b> · ' +
+          'tenere → <b>terrò</b> · bere → <b>berrò</b> · dare → <b>darò</b> · stare → <b>starò</b>.' },
+        { t: 'note', runs: 'pagare → pagherò · cercare → cercherò · mangiare → mangerò · cominciare → comincerò' },
+        { t: 'h2', text: 'Participes passés irréguliers' },
+        { t: 'p', runs: irrPP.join(' · ') },
+        { t: 'h2', text: 'Auxiliaire ESSERE' },
+        { t: 'p', runs: 'andare, venire, partire, arrivare, tornare, entrare, uscire, salire, scendere, ' +
+          'restare, rimanere, nascere, morire, diventare, piacere, essere, stare + <b>tous les verbes ' +
+          'réfléchis</b>. Le participe s’accorde avec le sujet.' },
+        { t: 'box', title: 'Avec AVERE', runs: 'Participe invariable… <b>sauf</b> devant lo / la / li / le : ' +
+          '<i>La pizza? L’ho mangiata. I libri? Li ho letti.</i>' }
+      ]
+    };
+    return [p1, p2];
   }
 
-  /* ---------- 8. dialogues ---------- */
   function sDialogue(sel) {
     return DATA.dialogues.filter(function (d) { return sel.indexOf(d.id) >= 0; }).map(function (d) {
-      return sheet(d.icon + ' ' + E(d.title), E(d.context) + ' — ' + d.ue,
-        '<table class="zebra"><thead><tr><th style="width:16%">Rôle</th><th style="width:44%">Italiano</th><th>Français</th></tr></thead><tbody>' +
-        d.lines.map(function (l) {
-          return '<tr><td><b>' + E(l.who) + '</b></td><td>' + E(l.it) + '</td><td>' + E(l.fr) + '</td></tr>';
-        }).join('') + '</tbody></table>' +
-        (d.useful ? '<div class="box"><div class="bt">Expressions clés</div>' +
-          d.useful.map(function (u) { return '<div><b>' + E(u.it) + '</b> — ' + E(u.fr) + '</div>'; }).join('') + '</div>' : ''));
-    }).join('');
+      var blocks = [{
+        t: 'table', zebra: true, w: [0.9, 2.4, 2.4],
+        head: ['Rôle', 'Italiano', 'Français'],
+        rows: d.lines.map(function (l) { return [{ c: '<b>' + l.who + '</b>' }, l.it, l.fr]; })
+      }];
+      if (d.useful && d.useful.length) {
+        blocks.push({ t: 'box', title: 'Expressions clés', runs:
+          d.useful.map(function (u) { return '<b>' + u.it + '</b> — ' + u.fr; }).join('<br>') });
+      }
+      return { title: d.title, sub: d.context + ' — ' + d.ue, blocks: blocks };
+    });
   }
 
-  /* ---------- 9. programme ---------- */
   function sProgramme() {
-    return DATA.program.map(function (ue) {
-      return sheet(ue.icon + ' ' + ue.ue + ' — ' + E(ue.title), E(ue.subtitle) + ' · ' + ue.sections.length + ' points',
-        '<table><thead><tr><th style="width:52%">Point du programme</th><th style="width:34%">Détail</th>' +
-        '<th style="width:14%">Vu / Su</th></tr></thead><tbody>' +
-        ue.sections.map(function (s) {
-          return '<tr><td><b>' + E(s.title) + '</b></td>' +
-            '<td class="note">' + E((s.points || []).slice(0, 4).join(' · ')) + '</td>' +
-            '<td><span class="track"><i></i><i></i></span></td></tr>';
-        }).join('') + '</tbody></table>');
-    }).join('') +
-    sheet('🗣 Compétences de communication', 'À cocher au fil de l’année',
-      '<table><tbody>' + DATA.competenze.map(function (c) {
-        return '<tr><td>' + E(c) + '</td><td style="width:60px"><span class="track"><i></i><i></i></span></td></tr>';
-      }).join('') + '</tbody></table>');
+    var out = DATA.program.map(function (ue) {
+      return {
+        title: ue.ue + ' — ' + ue.title,
+        sub: ue.subtitle + ' · ' + ue.sections.length + ' points',
+        blocks: [{
+          t: 'table', w: [2, 2.4, 0.7],
+          head: ['Point du programme', 'Détail', 'Vu / Su'],
+          rows: ue.sections.map(function (s) {
+            return [{ c: '<b>' + s.title + '</b>' },
+                    { c: '<i>' + (s.points || []).slice(0, 4).join(' · ') + '</i>' },
+                    '☐  ☐'];
+          })
+        }]
+      };
+    });
+    out.push({
+      title: 'Compétences de communication', sub: 'À cocher au fil de l’année',
+      blocks: [{ t: 'table', w: [4, 0.7], rows: DATA.competenze.map(function (c) { return [c, '☐  ☐']; }) }]
+    });
+    return out;
   }
 
-  /* ---------- index ---------- */
+  function generate(id, sel, extra) {
+    switch (id) {
+      case 'vocabulaire': return sVocabulaire(sel);
+      case 'test': return sTest(sel);
+      case 'cartes': return sCartes(sel);
+      case 'verbes': return sVerbes(sel);
+      case 'grammaire': return sGrammaire(sel);
+      case 'exercices': return sExercices(sel, extra);
+      case 'essentiel': return sEssentiel();
+      case 'dialogue': return sDialogue(sel);
+      case 'programme': return sProgramme();
+      default: return [];
+    }
+  }
+
+  /* ========================= index ===================================== */
   function index() {
     var h = U.pageHead('Le cours', 'Fiches à imprimer 🖨',
-      'Toutes les fiches sont générées à partir du contenu de l’application. ' +
-      'Cliquez sur <b>Imprimer</b> puis choisissez votre imprimante — ou <b>« Enregistrer au format PDF »</b> ' +
-      'dans la boîte de dialogue pour obtenir un fichier PDF.');
+      'Composez la fiche, regardez l’aperçu, puis téléchargez le PDF ou imprimez-la. ' +
+      'Le PDF est généré sur votre appareil : rien n’est envoyé sur Internet.');
 
     h += '<div class="grid c2">' + SHEETS.map(function (s) {
       return '<div class="sheet-card"><div class="ic">' + s.ic + '</div><div style="flex:1">' +
@@ -276,34 +285,35 @@ APP.views.stampa = (function () {
         '<a class="btn sm primary" href="#/stampa/' + s.id + '">Préparer la fiche</a></div></div>';
     }).join('') + '</div>';
 
-    h += '<div class="card mt2"><h3>💡 Obtenir un PDF</h3>' +
-      '<ol class="small" style="padding-left:18px;line-height:1.9;margin:0">' +
-      '<li>Préparez la fiche et cliquez sur <b>Imprimer</b> (ou Ctrl/⌘ + P).</li>' +
-      '<li>Dans « Destination », choisissez <b>Enregistrer au format PDF</b>.</li>' +
-      '<li>Activez « Graphiques d’arrière-plan » si vous voulez garder les trames grises des tableaux.</li>' +
-      '<li>Format conseillé : A4, marges par défaut.</li></ol></div>';
+    h += '<div class="card mt2"><h3>💡 Trois façons de récupérer une fiche</h3>' +
+      '<ul class="small" style="padding-left:18px;line-height:1.9;margin:0">' +
+      '<li><b>Aperçu PDF</b> — voyez le rendu exact, page par page, avant de vous décider.</li>' +
+      '<li><b>Télécharger le PDF</b> — un vrai fichier PDF, texte net et sélectionnable, ' +
+      'que vous pouvez garder sur votre téléphone ou envoyer à imprimer.</li>' +
+      '<li><b>Imprimer</b> — envoi direct à l’imprimante depuis le navigateur.</li>' +
+      '</ul></div>';
     return h;
   }
 
-  /* ---------- constructeur ---------- */
+  /* ======================== constructeur =============================== */
   var pickers = {
     vocabulaire: { src: 'vocab', label: 'Thèmes de vocabulaire', def: 3 },
     test:        { src: 'vocab', label: 'Thèmes à tester', def: 1 },
     cartes:      { src: 'vocab', label: 'Thèmes à transformer en cartes', def: 2 },
     verbes:      { src: 'verbs', label: 'Verbes à conjuguer', def: 8 },
     grammaire:   { src: 'grammar', label: 'Leçons à imprimer', def: 3 },
-    exercices:   { src: 'ex', label: 'Points travaillés (vide = tout le programme)', def: 0 },
+    exercices:   { src: 'ex', label: 'Points travaillés (aucun coché = tout le programme)', def: 0 },
     dialogue:    { src: 'dial', label: 'Dialogues', def: 2 },
     essentiel:   { src: null },
     programme:   { src: null }
   };
 
   function options(src) {
-    if (src === 'vocab') return DATA.vocab.map(function (t) { return { v: t.id, l: t.icon + ' ' + t.title, ue: t.ue }; });
-    if (src === 'verbs') return DATA.verbs.all.map(function (v) { return { v: v.inf, l: v.inf + ' — ' + v.fr, ue: '' }; });
-    if (src === 'grammar') return DATA.grammar.map(function (g) { return { v: g.id, l: g.icon + ' ' + g.title, ue: g.ue }; });
-    if (src === 'ex') return DATA.exercises.map(function (g) { return { v: g.topic, l: g.title, ue: g.ue }; });
-    if (src === 'dial') return DATA.dialogues.map(function (d) { return { v: d.id, l: d.icon + ' ' + d.title, ue: d.ue }; });
+    if (src === 'vocab') return DATA.vocab.map(function (t) { return { v: t.id, l: t.icon + ' ' + t.title }; });
+    if (src === 'verbs') return DATA.verbs.all.map(function (v) { return { v: v.inf, l: v.inf + ' — ' + v.fr }; });
+    if (src === 'grammar') return DATA.grammar.map(function (g) { return { v: g.id, l: g.icon + ' ' + g.title }; });
+    if (src === 'ex') return DATA.exercises.map(function (g) { return { v: g.topic, l: g.title }; });
+    if (src === 'dial') return DATA.dialogues.map(function (d) { return { v: d.id, l: d.icon + ' ' + d.title }; });
     return [];
   }
 
@@ -319,46 +329,38 @@ APP.views.stampa = (function () {
     if (p.src) {
       var opts = options(p.src);
       h += '<div class="card"><label class="field">' + E(p.label) + '</label>' +
-        '<div class="row" style="gap:5px;max-height:210px;overflow:auto;padding:2px" id="pick">' +
+        '<div class="picker" id="pick">' +
         opts.map(function (o, i) {
           return '<button class="chip ' + (i < p.def ? 'on' : '') + '" data-v="' + E(o.v) + '">' + E(o.l) + '</button>';
         }).join('') + '</div>' +
         '<div class="row mt"><button class="btn sm" id="all">Tout sélectionner</button>' +
         '<button class="btn sm" id="none">Tout désélectionner</button>' +
-        (id === 'exercices' ? '<span class="spacer"></span><label class="field mb0">Nombre d’exercices</label>' +
-          '<select id="exn" style="max-width:110px"><option>10</option><option selected>20</option><option>30</option><option>40</option></select>' : '') +
+        (id === 'exercices' ? '<span class="spacer"></span><label class="field mb0">Nombre</label>' +
+          '<select id="exn" style="max-width:100px"><option>10</option><option selected>20</option>' +
+          '<option>30</option><option>40</option></select>' : '') +
         '</div></div>';
     }
 
-    h += '<div class="print-toolbar"><button class="btn primary" id="print">🖨 Imprimer / Enregistrer en PDF</button>' +
-      '<button class="btn" id="refresh">↻ Régénérer</button>' +
-      '<span class="muted small" id="pgc"></span></div></div>';
+    h += '<div class="print-toolbar">' +
+      '<div class="seg" id="mode">' +
+        '<button class="seg-b on" data-m="page">Aperçu page</button>' +
+        '<button class="seg-b" data-m="pdf">Aperçu PDF</button>' +
+      '</div>' +
+      '<button class="btn primary" id="dl">⬇ Télécharger le PDF</button>' +
+      '<button class="btn" id="print">🖨 Imprimer</button>' +
+      '<span class="muted small" id="pgc"></span>' +
+      '</div></div>';
 
-    h += '<div id="preview"></div>';
+    h += '<div id="preview"></div><div id="pdfview" class="hidden"></div>';
     return h;
   }
 
-  function generate(id, sel, extra) {
-    switch (id) {
-      case 'vocabulaire': return sVocabulaire(sel);
-      case 'test': return sTest(sel);
-      case 'cartes': return sCartes(sel);
-      case 'verbes': return sVerbes(sel);
-      case 'grammaire': return sGrammaire(sel);
-      case 'exercices': return sExercices(sel, extra);
-      case 'essentiel': return sEssentiel();
-      case 'dialogue': return sDialogue(sel);
-      case 'programme': return sProgramme();
-      default: return '';
-    }
-  }
-
-  function render(p) { return p[0] ? builder(p[0]) : index(); }
-
+  /* ============================ montage ================================= */
   function mount(root, p) {
     var id = p[0];
     if (!id) return;
     var pk = pickers[id];
+    var currentUrl = null, mode = 'page', dirty = true;
 
     function selection() {
       var s = [];
@@ -366,21 +368,90 @@ APP.views.stampa = (function () {
       return s;
     }
 
-    function refresh() {
+    function model() {
       var extra = root.querySelector('#exn') ? +root.querySelector('#exn').value : null;
-      var sel = pk.src ? selection() : [];
-      var html;
-      if (pk.src && !sel.length && id !== 'exercices') {
-        html = '<div class="card center muted no-print">Sélectionnez au moins un élément ci-dessus pour générer la fiche.</div>';
-      } else {
-        html = generate(id, sel, extra);
-      }
-      root.querySelector('#preview').innerHTML = html;
-      var n = root.querySelectorAll('#preview .sheet').length;
-      var c = root.querySelector('#pgc');
-      if (c) c.textContent = n + ' page' + (n > 1 ? 's' : '') + ' générée' + (n > 1 ? 's' : '');
+      return generate(id, pk.src ? selection() : [], extra);
     }
 
+    function fileName() {
+      return 'impariamo-' + id + '.pdf';
+    }
+
+    function revoke() {
+      if (currentUrl) { URL.revokeObjectURL(currentUrl); currentUrl = null; }
+    }
+
+    function empty() {
+      return pk.src && !selection().length && id !== 'exercices';
+    }
+
+    function drawPage() {
+      var pv = root.querySelector('#preview');
+      if (empty()) {
+        pv.innerHTML = '<div class="card center muted no-print">Sélectionnez au moins un élément ci-dessus pour composer la fiche.</div>';
+        root.querySelector('#pgc').textContent = '';
+        return;
+      }
+      var sheets = model();
+      pv.innerHTML = SH.html(sheets);
+      root.querySelector('#pgc').textContent = sheets.length + ' fiche' + (sheets.length > 1 ? 's' : '');
+    }
+
+    function buildPdf(cb) {
+      var pv = root.querySelector('#pdfview');
+      pv.innerHTML = '<div class="card center muted">Génération du PDF…</div>';
+      /* laisse le navigateur peindre l'état « en cours » avant de calculer */
+      setTimeout(function () {
+        var sheets = model();
+        if (!sheets.length) { pv.innerHTML = U.empty('Rien à générer.'); return; }
+        var meta = SHEETS.filter(function (x) { return x.id === id; })[0];
+        var doc = SH.pdf(sheets, { title: 'Impariamo l’italiano — ' + (meta ? meta.t : id) });
+        revoke();
+        currentUrl = URL.createObjectURL(doc.blob());
+        dirty = false;
+        cb(currentUrl, doc.pageCount());
+      }, 30);
+    }
+
+    function showPdf() {
+      var pv = root.querySelector('#pdfview');
+      if (empty()) {
+        pv.innerHTML = '<div class="card center muted">Sélectionnez au moins un élément ci-dessus.</div>';
+        return;
+      }
+      buildPdf(function (url, pages) {
+        pv.innerHTML =
+          '<div class="pdf-frame"><iframe title="Aperçu du PDF" src="' + url + '#view=FitH"></iframe></div>' +
+          '<div class="row mt" style="justify-content:center">' +
+          '<a class="btn" href="' + url + '" target="_blank" rel="noopener">↗ Ouvrir dans un nouvel onglet</a>' +
+          '<button class="btn primary" id="dl2">⬇ Télécharger</button></div>' +
+          '<p class="xs muted center mt">L’aperçu ne s’affiche pas ? Certains navigateurs mobiles ' +
+          'n’intègrent pas les PDF : utilisez « Ouvrir dans un nouvel onglet » ou « Télécharger ».</p>';
+        root.querySelector('#pgc').textContent = pages + ' page' + (pages > 1 ? 's' : '');
+        root.querySelector('#dl2').addEventListener('click', download);
+      });
+    }
+
+    function download() {
+      if (empty()) { U.toast('Sélectionnez au moins un élément'); return; }
+      var go = function (url) {
+        var a = document.createElement('a');
+        a.href = url; a.download = fileName();
+        document.body.appendChild(a); a.click();
+        setTimeout(function () { a.remove(); }, 0);
+        U.toast('PDF téléchargé');
+      };
+      if (currentUrl && !dirty) go(currentUrl);
+      else buildPdf(function (url) { go(url); if (mode === 'pdf') showPdf(); });
+    }
+
+    function refresh() {
+      dirty = true;
+      if (mode === 'page') drawPage();
+      else showPdf();
+    }
+
+    /* --- interactions --- */
     if (pk.src) {
       root.querySelectorAll('#pick .chip').forEach(function (c) {
         c.addEventListener('click', function () { c.classList.toggle('on'); refresh(); });
@@ -394,13 +465,38 @@ APP.views.stampa = (function () {
       var exn = root.querySelector('#exn');
       if (exn) exn.addEventListener('change', refresh);
     }
-    root.querySelector('#print').addEventListener('click', function () {
-      try { window.print(); }
-      catch (e) { U.toast('Utilisez Ctrl/⌘ + P pour imprimer cette page'); }
+
+    root.querySelectorAll('#mode .seg-b').forEach(function (b) {
+      b.addEventListener('click', function () {
+        root.querySelectorAll('#mode .seg-b').forEach(function (x) { x.classList.remove('on'); });
+        b.classList.add('on');
+        mode = b.getAttribute('data-m');
+        root.querySelector('#preview').classList.toggle('hidden', mode !== 'page');
+        root.querySelector('#pdfview').classList.toggle('hidden', mode !== 'pdf');
+        if (mode === 'pdf') { if (dirty || !currentUrl) showPdf(); }
+        else drawPage();
+      });
     });
-    root.querySelector('#refresh').addEventListener('click', refresh);
-    refresh();
+
+    root.querySelector('#dl').addEventListener('click', download);
+    root.querySelector('#print').addEventListener('click', function () {
+      if (mode !== 'page') {
+        root.querySelectorAll('#mode .seg-b')[0].click();
+      }
+      try { window.print(); }
+      catch (e) { U.toast('Utilisez Ctrl/⌘ + P pour imprimer'); }
+    });
+
+    drawPage();
+    root._revoke = revoke;
   }
 
-  return { title: 'Fiches à imprimer', render: render, mount: mount };
+  function render(p) { return p[0] ? builder(p[0]) : index(); }
+  function unmount() {
+    var m = document.getElementById('main');
+    if (m && m._revoke) { m._revoke(); m._revoke = null; }
+  }
+
+  return { title: 'Fiches à imprimer', render: render, mount: mount, unmount: unmount,
+           __buildForTests: generate };
 })();

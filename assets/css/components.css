@@ -221,3 +221,42 @@ details.sect > summary:hover { background: var(--surface-2); }
 .sheet-card .ic { font-size: 1.5rem; }
 .sheet-card h4 { margin: 0 0 3px; font-size: .95rem; }
 .sheet-card p { margin: 0 0 9px; font-size: .82rem; color: var(--muted); }
+
+/* ===== Contrôle segmenté (aperçu page / PDF) =========================== */
+.seg { display: inline-flex; background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: var(--radius-s); padding: 3px; gap: 3px; }
+.seg-b { border: 0; background: none; font: inherit; font-size: .85rem; font-weight: 570;
+  color: var(--muted); padding: 6px 13px; border-radius: 6px; cursor: pointer; }
+.seg-b.on { background: var(--surface); color: var(--text); box-shadow: var(--shadow); }
+
+/* ===== Aperçu PDF intégré ============================================== */
+.pdf-frame { background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: var(--radius-s); overflow: hidden; }
+.pdf-frame iframe { display: block; width: 100%; height: min(78vh, 900px); border: 0; background: #fff; }
+
+/* ===== Sélecteur de contenu des fiches ================================= */
+.picker { display: flex; flex-wrap: wrap; gap: 5px; max-height: 210px; overflow-y: auto; padding: 2px; }
+
+/* ===== Listes du lexique =============================================== */
+.lex-row { flex-wrap: wrap; }
+
+@media (max-width: 640px) {
+  /* en colonne : italien, puis français, puis la note */
+  .lex-row { display: grid; grid-template-columns: 1fr; gap: 2px; padding: 10px 12px; }
+  .lex-it, .lex-fr, .lex-note { flex: none; min-width: 0; }
+  .lex-fr { font-size: .88rem; }
+  .lex-note { font-size: .78rem; }
+
+  .ex-list li { flex-direction: column; gap: 2px; }
+  .dlg-line { flex-direction: column; gap: 3px; }
+  .dlg-who { flex: none; }
+
+  .hm-keys { max-width: none; width: 100%;
+    grid-template-columns: repeat(auto-fill, minmax(30px, 1fr)); }
+  .hangman { gap: 14px; }
+  .hm-word { font-size: 1.5rem; letter-spacing: .16em; word-break: break-all; }
+
+  .mem-grid { grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); }
+  .conj-grid { grid-template-columns: 1fr; }
+  .fc-word { font-size: 1.3rem; }
+}

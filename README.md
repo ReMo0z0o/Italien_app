@@ -75,9 +75,28 @@ les verbes ou les leçons) et s’affiche en aperçu A4 avant impression.
 | 🗣 **Dialogues** | Texte complet avec traduction, pour lire et jouer à deux. |
 | 🗺 **Programme à cocher** | Toute l’arborescence du cours avec cases « Vu / Su ». |
 
-**Pour obtenir un PDF :** cliquez sur *Imprimer* (ou Ctrl/⌘ + P), puis choisissez
-**« Enregistrer au format PDF »** comme destination. Activez « Graphiques d’arrière-plan »
-pour conserver les trames grises des tableaux.
+### Aperçu, puis téléchargement
+
+Chaque fiche se compose à la carte (thèmes, verbes ou leçons à cocher), puis se consulte
+de deux façons avant d’être récupérée :
+
+| Bouton | Effet |
+|---|---|
+| **Aperçu page** | Le rendu HTML, qui reflue sur téléphone pour rester lisible. |
+| **Aperçu PDF** | Le **vrai PDF**, affiché page par page dans la page même. |
+| **⬇ Télécharger le PDF** | Enregistre le fichier (`impariamo-<fiche>.pdf`). |
+| **🖨 Imprimer** | Envoi direct à l’imprimante. |
+
+Le PDF est **généré sur l’appareil**, par un moteur maison (`assets/js/core/pdf.js`) :
+aucune bibliothèque externe, aucune requête réseau, rien n’est envoyé nulle part.
+Le texte est **vectoriel et sélectionnable** (polices PDF standard, encodage WinAnsi),
+donc net à n’importe quel zoom et à l’impression — ce n’est pas une capture d’image.
+La pagination est réelle : en-tête répété, tableaux dont l’en-tête se réaffiche à chaque
+page, colonnes de vocabulaire équilibrées.
+
+Si l’aperçu intégré reste vide — certains navigateurs mobiles n’affichent pas les PDF
+dans une page — les boutons **« Ouvrir dans un nouvel onglet »** et **« Télécharger »**
+restent disponibles juste en dessous.
 
 ---
 
@@ -109,10 +128,25 @@ assets/js/data/             ← tout le contenu pédagogique
   exercises.js              47 séries / 386 exercices
   phrases.js                9 dialogues, 2 modèles d’e-mail, 6 boîtes à outils
   program.js                arborescence du cours (74 points)
-assets/js/core/             util (comparaison de réponses), speech, store, ui, router
+assets/js/core/
+  util.js                   comparaison tolérante des réponses, tirages
+  pdf.js                    moteur PDF vectoriel (polices standard, WinAnsi)
+  sheet.js                  modèle de fiche + rendus HTML et PDF
+  speech.js, store.js, ui.js, router.js
 assets/js/views/            une vue par section de l’application
 tests/                      contrôle du contenu + tests navigateur
 ```
+
+### Le moteur PDF
+
+`core/pdf.js` écrit un PDF 1.4 à la main : objets, flux de contenu, table xref. Il n’embarque
+aucune police — il utilise les polices standard (Times, Helvetica), dont il connaît les
+largeurs de glyphes, ce qui lui permet de couper les lignes, de centrer et d’aligner à droite
+correctement. Les lettres accentuées reprennent la largeur de leur lettre de base, ce qui est
+exact pour ces deux familles. `core/sheet.js` décrit une fiche comme une suite de blocs
+(titre, paragraphe, encadré, tableau, liste de vocabulaire, cartes à découper, exercices) et
+sait la rendre **soit en HTML, soit en PDF** — les deux aperçus montrent donc toujours le
+même contenu.
 
 ### Le moteur de conjugaison
 
@@ -141,6 +175,8 @@ npm test             # contenu + 38 routes + 18 parcours utilisateur
 * `npm run test:data` — 7 000+ contrôles sur le contenu : identifiants uniques, liens du
   programme, cohérence des exercices, formes verbales de référence, tolérance de la
   correction (accents, apostrophes, fautes de frappe).
+* `npm run test:pdf` — génère les neuf fiches, relit le flux PDF produit et vérifie
+  qu’aucun texte ni cadre ne dépasse les marges A4, sur l’ensemble des pages.
 * `npm run test:routes` — charge les 38 routes dans Chromium et échoue à la moindre
   erreur console.
 * `npm run test:flows` — joue réellement chaque mode : une pile de flashcards jusqu’au

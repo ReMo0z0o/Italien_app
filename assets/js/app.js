@@ -61,8 +61,14 @@
                       '@media(min-width:901px){.topbar{display:none}}';
     document.head.appendChild(css);
 
+    var side = document.getElementById('sidebar');
+    /* sur mobile la navigation est repliée : la page commence par son contenu */
+    if (window.innerWidth <= 900) side.classList.add('collapsed');
     document.getElementById('burger').addEventListener('click', function () {
-      document.getElementById('sidebar').classList.toggle('collapsed');
+      side.classList.toggle('collapsed');
+    });
+    window.addEventListener('resize', function () {
+      if (window.innerWidth > 900) side.classList.remove('collapsed');
     });
 
     var themes = ['auto', 'light', 'dark'];

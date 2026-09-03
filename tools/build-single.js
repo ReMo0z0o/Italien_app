@@ -16,7 +16,8 @@ const CSS = ['assets/css/base.css', 'assets/css/components.css', 'assets/css/pri
 const JS = [
   'assets/js/data/vocab.js', 'assets/js/data/verbs.js', 'assets/js/data/grammar.js',
   'assets/js/data/exercises.js', 'assets/js/data/phrases.js', 'assets/js/data/program.js',
-  'assets/js/core/util.js', 'assets/js/core/speech.js', 'assets/js/core/store.js',
+  'assets/js/core/util.js', 'assets/js/core/pdf.js', 'assets/js/core/sheet.js',
+  'assets/js/core/speech.js', 'assets/js/core/store.js',
   'assets/js/core/ui.js', 'assets/js/core/router.js',
   'assets/js/views/home.js', 'assets/js/views/programma.js', 'assets/js/views/lezioni.js',
   'assets/js/views/lessico.js', 'assets/js/views/dialoghi.js', 'assets/js/views/verbi.js',
