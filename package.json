@@ -5,6 +5,7 @@
   "private": true,
   "scripts": {
     "start": "python3 -m http.server 8080",
+    "build": "node tools/build-single.js",
     "test": "node tests/data.js && node tests/smoke.js && node tests/interact.js",
     "test:data": "node tests/data.js",
     "test:routes": "node tests/smoke.js",

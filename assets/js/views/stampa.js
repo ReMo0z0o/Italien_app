@@ -394,7 +394,10 @@ APP.views.stampa = (function () {
       var exn = root.querySelector('#exn');
       if (exn) exn.addEventListener('change', refresh);
     }
-    root.querySelector('#print').addEventListener('click', function () { window.print(); });
+    root.querySelector('#print').addEventListener('click', function () {
+      try { window.print(); }
+      catch (e) { U.toast('Utilisez Ctrl/⌘ + P pour imprimer cette page'); }
+    });
     root.querySelector('#refresh').addEventListener('click', refresh);
     refresh();
   }

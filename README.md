@@ -21,6 +21,17 @@ npm start           # http://localhost:8080
 python3 -m http.server 8080
 ```
 
+**En un seul fichier** — pour l’envoyer par mail, le poser sur une clé USB ou
+l’emporter hors ligne :
+
+```bash
+npm run build       # → dist/impariamo.html
+```
+
+`dist/impariamo.html` contient l’application entière (contenu, styles, code) en un
+seul document autonome de ~380 Ko, sans aucune ressource externe. Il passe la même
+batterie de tests que la version en fichiers séparés.
+
 ---
 
 ## Ce que contient l’application
