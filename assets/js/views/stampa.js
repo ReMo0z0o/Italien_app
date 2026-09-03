@@ -355,12 +355,26 @@ APP.views.stampa = (function () {
     return h;
   }
 
+  /* Certaines plateformes d'hébergement interdisent le téléchargement direct
+     et exposent à la place une API d'enregistrement. On la résout une fois,
+     sans jamais en dépendre : ailleurs, elle reste simplement absente. */
+  var hostSaver = null;
+  (function resolveHostSaver() {
+    try {
+      if (window.claude && typeof window.claude.use === 'function') {
+        Promise.resolve(window.claude.use('downloads')).then(function (d) {
+          hostSaver = (d && typeof d.save === 'function') ? d : null;
+        }, function () { hostSaver = null; });
+      }
+    } catch (e) { hostSaver = null; }
+  })();
+
   /* ============================ montage ================================= */
   function mount(root, p) {
     var id = p[0];
     if (!id) return;
     var pk = pickers[id];
-    var currentUrl = null, mode = 'page', dirty = true;
+    var currentUrl = null, currentBlob = null, mode = 'page', dirty = true;
 
     function selection() {
       var s = [];
@@ -379,6 +393,7 @@ APP.views.stampa = (function () {
 
     function revoke() {
       if (currentUrl) { URL.revokeObjectURL(currentUrl); currentUrl = null; }
+      currentBlob = null;
     }
 
     function empty() {
@@ -407,9 +422,10 @@ APP.views.stampa = (function () {
         var meta = SHEETS.filter(function (x) { return x.id === id; })[0];
         var doc = SH.pdf(sheets, { title: 'Impariamo l’italiano — ' + (meta ? meta.t : id) });
         revoke();
-        currentUrl = URL.createObjectURL(doc.blob());
+        currentBlob = doc.blob();
+        currentUrl = URL.createObjectURL(currentBlob);
         dirty = false;
-        cb(currentUrl, doc.pageCount());
+        cb(currentUrl, doc.pageCount(), currentBlob);
       }, 30);
     }
 
@@ -432,17 +448,32 @@ APP.views.stampa = (function () {
       });
     }
 
+    /* Enregistrement du fichier.
+       Dans une page hébergée classiquement (site, fichier local), un lien
+       « download » suffit. Dans un cadre qui interdit les téléchargements
+       directs, on passe par l'API d'enregistrement de l'hôte si elle existe. */
+    function save(blob, url) {
+      if (hostSaver) {
+        hostSaver.save({ filename: fileName(), data: blob }).then(function (r) {
+          U.toast(r && r.status === 'delivered' ? 'PDF transmis' : 'PDF enregistré');
+        }, function (err) {
+          var code = err && err.code;
+          if (code === 'declined') return;
+          U.toast('Enregistrement refusé ici — utilisez « Ouvrir dans un nouvel onglet »');
+        });
+        return;
+      }
+      var a = document.createElement('a');
+      a.href = url; a.download = fileName(); a.rel = 'noopener';
+      document.body.appendChild(a); a.click();
+      setTimeout(function () { a.remove(); }, 0);
+      U.toast('PDF téléchargé');
+    }
+
     function download() {
       if (empty()) { U.toast('Sélectionnez au moins un élément'); return; }
-      var go = function (url) {
-        var a = document.createElement('a');
-        a.href = url; a.download = fileName();
-        document.body.appendChild(a); a.click();
-        setTimeout(function () { a.remove(); }, 0);
-        U.toast('PDF téléchargé');
-      };
-      if (currentUrl && !dirty) go(currentUrl);
-      else buildPdf(function (url) { go(url); if (mode === 'pdf') showPdf(); });
+      if (currentUrl && currentBlob && !dirty) save(currentBlob, currentUrl);
+      else buildPdf(function (url, pages, blob) { save(blob, url); if (mode === 'pdf') showPdf(); });
     }
 
     function refresh() {
